@@ -6,3 +6,4 @@ lib/*
 .env
 *.txt
 *.md
+!README.md
