@@ -1,4 +1,4 @@
-# claude-swiss-knife
+# anthroprompter
 
 Inefficient personal tool for interacting with Claude from console. Inefficient because input data is for now not cleaned and thus more tokens are sent than necessary including HTML stuff.
 
