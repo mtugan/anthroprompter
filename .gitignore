@@ -7,3 +7,9 @@ lib/*
 *.txt
 *.md
 !README.md
+*.un~
+*~
+Scripts/*
+Lib/*
+.ipynb_checkpoints/*
+pyvenv.cfg

@@ -42,9 +42,10 @@ def extract_inputs(input_string):
         result = [text] + urls
         return result
     else:
+        print("\nThe prompt is not in the specified format, exiting!")
+        sys.exit(0)
         return None
-
-
+ 
 def main(args):
     # Prep environment
 
@@ -59,7 +60,7 @@ def main(args):
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
 
     if not anthropic_api_key:
-        print("\nAn Anthropic API key must be specified in .dotenv, exiting!\n")
+        print("\nAn Anthropic API key must be specified in .dotenv, exiting!")
         sys.exit(0)
 
     input_file_name = args.input
@@ -79,7 +80,12 @@ def main(args):
     extracted_inputs = []
 
     with open(os.path.join(current_dir, input_file_name), "r") as file:
-        extracted_inputs = extract_inputs(file.read().strip())
+        file_string = file.read().strip()
+
+        if not args.no_refs:
+            extracted_inputs = extract_inputs(file.read().strip())
+        else:
+            extracted_inputs = [file_string]
 
     user_prompt = extracted_inputs[0]
 
@@ -94,6 +100,9 @@ def main(args):
     if os.path.isfile(system_prompt_file_path):
         with open(system_prompt_file_path, "r") as file:
             system_prompt = file.read().strip()
+
+    if system_prompt != "":
+        print("\nSystem prompt is being used!\n")
 
     # Download webpages and collect all of the data
 
@@ -111,9 +120,12 @@ def main(args):
     with open(prompt_file_path, "w") as file:
         file.write(final_prompt)
 
+
     # Then request inference from Anthropic's servers
 
     client = anthropic.Client(api_key=anthropic_api_key)
+
+    print("Sending prompt to Anthropic servers.")
 
     response = client.messages.create(
         messages=[{"role": "user", "content": final_prompt}],
@@ -122,6 +134,8 @@ def main(args):
         model=claude_model,
         max_tokens=4096,
     )
+
+    print("Server responded with message.")
 
     # Collect all answers
 
@@ -159,6 +173,24 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "-t",
+        "--temperature",
+        required=False,
+        help="Amount of randomness injected into the response. Defaults to 1.0. Ranges from 0.0 to 1.0. Use temperature closer to 0.0 for analytical / multiple choice, and closer to 1.0 for creative and generative tasks.",
+        default=0,
+        type=float,
+    )
+
+    parser.add_argument(
+        "-nr",
+        "--no-refs",
+        action='store_true',
+        required=False,
+        default=False,
+        help="If the prompt doesn't have any links and is not using the format, use this flag.",
+    )
+
+    parser.add_argument(
         "--system",
         required=False,
         help="System prompt file path. It will automatically look for system.txt.",
@@ -180,15 +212,6 @@ if __name__ == "__main__":
         help="Website download depth when recursing child links. I would recommend not setting it above 3 initially such that you don't eat up 15$ worth of tokens immediately :].",
         default=1,
         type=int,
-    )
-
-    parser.add_argument(
-        "-t",
-        "--temperature",
-        required=False,
-        help="Amount of randomness injected into the response. Defaults to 1.0. Ranges from 0.0 to 1.0. Use temperature closer to 0.0 for analytical / multiple choice, and closer to 1.0 for creative and generative tasks.",
-        default=0,
-        type=float,
     )
 
     main(parser.parse_args())
