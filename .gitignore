@@ -13,3 +13,5 @@ Scripts/*
 Lib/*
 .ipynb_checkpoints/*
 pyvenv.cfg
+etc/*
+share/*
