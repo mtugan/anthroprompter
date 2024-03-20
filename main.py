@@ -10,7 +10,20 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 
-def download_webpage_recursive(url, depth=3):
+def is_valid_file(file):
+    return os.path.isfile(os.path.abspath(file))
+
+
+def read_file_contents(file):
+    file_path = os.path.abspath(file)
+    try:
+        with open(file_path, "r") as file:
+            return file.read().strip()
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Input file not found: {file_path}")
+
+
+def download_webpage_recursive(url, depth=1):
     response = requests.get(url)
     soup = BeautifulSoup(response.text, "html.parser")
     text = soup.get_text()
@@ -23,39 +36,61 @@ def download_webpage_recursive(url, depth=3):
 
             if href:
                 if href.startswith(("http://", "https://")) and base_url in href:
-                    text += "\n\n" + download_webpage(href, depth - 1)
+                    text += "\n\n" + download_webpage_recursive(href, depth - 1)
                 elif href != "/" and not href.startswith(("http://", "https://")):
-                    print(href)
-                    text += "\n\n" + download_webpage(
+                    text += "\n\n" + download_webpage_recursive(
                         "http://" + base_url + href, depth - 1
                     )
     return text
 
 
-def extract_inputs(input_string):
-    pattern = r'"(.*?)"((?:\s+\S+)*)'
-    match = re.match(pattern, input_string)
-
-    if match:
-        text = match.group(1)
-        urls = match.group(2).split()
-        result = [text] + urls
-        return result
-    else:
-        print("\nThe prompt is not in the specified format, exiting!")
-        sys.exit(0)
-        return None
- 
 def main(args):
     # Prep environment
 
-    current_dir = os.getcwd()
-
     load_dotenv()
 
-    # Variables
+    # Prepare system prompt text
 
-    claude_model = os.getenv("CLAUDE_MODEL") or args.model
+    system_prompt = None
+
+    if is_valid_file(args.system):
+        system_prompt = read_file_contents(args.system)
+        print(f"\nSystem prompt {args.system} is being used!\n")
+
+    # Prompt construction
+
+    if not is_valid_file(args.input):
+        print(f"\nfile {args.input} does not exist, exiting!")
+        sys.exit(0)
+
+    raw_input = read_file_contents(args.input)
+
+    input_parts = re.split(r"(\s+)", raw_input)
+
+    extracted_inputs = []
+
+    for part in input_parts:
+        if part.startswith(("http://", "https://")):
+            extracted_inputs.append(
+                "\n\n" + download_webpage_recursive(part.strip(), args.ddepth) + "\n\n"
+            )
+        elif is_valid_file(part):
+            extracted_inputs.append("\n\n" + read_file_contents(part.strip()) + "\n\n")
+        else:
+            extracted_inputs.append(part)
+
+    final_prompt = "".join(extracted_inputs)
+
+    # First record what was prompted
+
+    prompt_file_path = f"{os.path.splitext(args.input)[0]}_prompt.txt"
+
+    with open(prompt_file_path, "w", encoding='utf-8') as file:
+        file.write(final_prompt)
+
+    print(f"\nFinal prompt written to {prompt_file_path}")
+
+    # Then request inference from Anthropic's servers
 
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
 
@@ -63,69 +98,11 @@ def main(args):
         print("\nAn Anthropic API key must be specified in .dotenv, exiting!")
         sys.exit(0)
 
-    input_file_name = args.input
-
-    system_prompt_file_name = args.system
-
-    prompt_file_path = f"{os.path.splitext(input_file_name)[0]}_prompt.txt"
-
-    answer_file_path = (
-        os.path.join(current_dir, args.output)
-        if args.output
-        else f"{os.path.splitext(input_file_name)[0]}_answer.txt"
-    )
-
-    # Extract input data
-
-    extracted_inputs = []
-
-    with open(os.path.join(current_dir, input_file_name), "r") as file:
-        file_string = file.read().strip()
-
-        if not args.no_refs:
-            extracted_inputs = extract_inputs(file.read().strip())
-        else:
-            extracted_inputs = [file_string]
-
-    user_prompt = extracted_inputs[0]
-
-    urls = extracted_inputs[1:]
-
-    # Prepare system prompt text
-
-    system_prompt = ""
-
-    system_prompt_file_path = os.path.join(current_dir, system_prompt_file_name)
-
-    if os.path.isfile(system_prompt_file_path):
-        with open(system_prompt_file_path, "r") as file:
-            system_prompt = file.read().strip()
-
-    if system_prompt != "":
-        print("\nSystem prompt is being used!\n")
-
-    # Download webpages and collect all of the data
-
-    appended_data = ""
-
-    for url in urls:
-        appended_data += download_webpage_recursive(url, args.ddepth) + "\n"
-
-    # Construct final prompt
-
-    final_prompt = f"{user_prompt}\n\n{appended_data}"
-
-    # First record what was prompted
-
-    with open(prompt_file_path, "w") as file:
-        file.write(final_prompt)
-
-
-    # Then request inference from Anthropic's servers
-
     client = anthropic.Client(api_key=anthropic_api_key)
 
-    print("Sending prompt to Anthropic servers.")
+    claude_model = os.getenv("CLAUDE_MODEL") or args.model
+
+    print("\nSending prompt to Anthropic servers.")
 
     response = client.messages.create(
         messages=[{"role": "user", "content": final_prompt}],
@@ -135,7 +112,7 @@ def main(args):
         max_tokens=4096,
     )
 
-    print("Server responded with message.")
+    print("\nServer responded with message.")
 
     # Collect all answers
 
@@ -145,10 +122,16 @@ def main(args):
 
     # Then finally record the answer
 
-    with open(answer_file_path, "w") as file:
+    answer_file_path = (
+        os.path.abspath(args.output)
+        if args.output
+        else os.path.abspath(os.path.splitext(args.input)[0] + "_answer.txt")
+    )
+
+    with open(answer_file_path, "w", encoding='utf-8') as file:
         file.write(response_text)
 
-    print(f"Answer saved to {answer_file_path}")
+    print(f"\nAnswer saved to {answer_file_path}")
 
 
 if __name__ == "__main__":
@@ -160,7 +143,7 @@ if __name__ == "__main__":
         "-i",
         "--input",
         required=True,
-        help='Input file path. The input file must be formatted as "PROMPT" WEBSITE_1 WEBSITE_2 WEBSITE_3 ... Each website in order and all child links up to some depth will be downloaded and appended to the prompt which will be sent to Anthropic\'s servers for inference.',
+        help='Input file path. The input file may contain both links and filepaths, both are going to be expanded in place, meaning that any website data is going to be expanded inline with text, and any filepath is going to be expanded inline with text.',
         type=str,
     )
 
@@ -179,15 +162,6 @@ if __name__ == "__main__":
         help="Amount of randomness injected into the response. Defaults to 1.0. Ranges from 0.0 to 1.0. Use temperature closer to 0.0 for analytical / multiple choice, and closer to 1.0 for creative and generative tasks.",
         default=0,
         type=float,
-    )
-
-    parser.add_argument(
-        "-nr",
-        "--no-refs",
-        action='store_true',
-        required=False,
-        default=False,
-        help="If the prompt doesn't have any links and is not using the format, use this flag.",
     )
 
     parser.add_argument(
