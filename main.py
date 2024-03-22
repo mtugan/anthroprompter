@@ -13,7 +13,6 @@ from dotenv import load_dotenv
 def prepare_prompt(prompt):
     # Remove comments from Python code
     prompt = re.sub(r"#.*", "", prompt)
-
     prompt = re.sub(r'""".*?"""', "", prompt, flags=re.DOTALL)
 
     # Remove unnecessary spaces around punctuation
@@ -107,34 +106,9 @@ def download_webpage_recursive(url, depth=1):
     return text
 
 
-def main(args):
-    # Prep environment
-
-    load_dotenv()
-
-    # Prepare system prompt text
-
-    system_prompt = ""
-
-    if is_valid_file(args.system):
-        system_prompt = read_file_contents_recursive(args.system)
-        print(f"\nSystem prompt {args.system} is being used!")
-
-    # Prompt construction
-
-    if not os.path.exists(args.input):
-        print(f"\nFile or directory {args.input} does not exist, exiting!")
-        sys.exit(0)
-
+def expand_references(prompt, args):
+    input_parts = re.split(r"(\s+)", prompt)
     extracted_inputs = []
-
-    # This will always be a normal file, not a dir
-
-    raw_input = read_file_contents_recursive(args.input)
-
-    # Split into parts which we can check
-
-    input_parts = re.split(r"(\s+)", raw_input)
 
     for part in input_parts:
         # If URL, download recursively
@@ -153,63 +127,124 @@ def main(args):
             # Read
             extracted_inputs.append(part)
 
-    final_prompt = (
-        prepare_prompt("".join(extracted_inputs))
-        if args.clean
-        else "".join(extracted_inputs)
-    )
+    if args.clean:
+        final_prompt = prepare_prompt("".join(extracted_inputs))
+    else:
+        final_prompt = "".join(extracted_inputs)
 
-    # First record what was prompted
+    return final_prompt
 
-    prompt_file_path = f"{os.path.splitext(args.input)[0]}_prompt.txt"
 
-    with open(prompt_file_path, "w", encoding="utf-8") as file:
-        file.write(final_prompt)
-
-    print(f"\nFinal prompt written to {prompt_file_path}")
-
-    # Then request inference from Anthropic's servers
-
+def query_anthropic(prompt, anthropic_model, system_prompt, tokens):
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
 
     if not anthropic_api_key:
         print("\nAn Anthropic API key must be specified in .dotenv, exiting!")
         sys.exit(0)
 
+    # Abstract this out into class variable
     client = anthropic.Client(api_key=anthropic_api_key)
 
-    claude_model = os.getenv("CLAUDE_MODEL") or args.model
-
-    print("\nSending prompt to Anthropic servers.")
-
     response = client.messages.create(
-        messages=[{"role": "user", "content": final_prompt}],
-        temperature=args.temperature,
+        messages=[{"role": "user", "content": prompt}],
+        model=anthropic_model,
         system=system_prompt,
-        model=claude_model,
-        max_tokens=4096,
+        max_tokens=tokens,
     )
 
-    print("\nServer responded with message.")
-
-    # Collect all answers
-
-    response_text = " ".join(
+    return " ".join(
         [content.text for content in response.content if content.type == "text"]
     )
 
-    # Then finally record the answer
 
-    answer_file_path = (
-        os.path.abspath(args.output)
-        if args.output
-        else os.path.abspath(os.path.splitext(args.input)[0] + "_answer.txt")
+def query_anthropic_enhance_prompt(prompt):
+    system_prompt = read_file_contents_recursive("assistants/00-prompt.txt")
+    return query_anthropic(prompt, "claude-3-opus-20240229", system_prompt, 4096)
+
+
+def replace_path_suffix(path, suffix):
+    return f"{os.path.splitext(path)[0]}{suffix}"
+
+
+def save_to_file(data, path, message):
+    with open(path, "w", encoding="utf-8") as file:
+        file.write(data)
+    print("\n" + message)
+
+
+def main(args):
+    # Prep environment
+    load_dotenv()
+
+    # Prepare system prompt text
+    system_prompt = ""
+    prompt_enhancement = False
+
+    if args.enhance:
+        # Use default system prompt and model for prompt enhancement
+        prompt_enhancement = True
+
+    if args.system and is_valid_file(args.system):
+        system_prompt = read_file_contents_recursive(args.system)
+        print(f"\nSystem prompt {args.system} is being used!")
+
+    # Prompt construction
+    if not os.path.exists(args.input):
+        print(f"\nFile or directory {args.input} does not exist, exiting!")
+        sys.exit(0)
+
+    extracted_inputs = []
+
+    # This will always be a normal file, not a dir
+    raw_input = read_file_contents_recursive(args.input)
+
+    if prompt_enhancement:
+        print("\nEnhancing prompt!")
+
+        # Enhance the prompt using the default system prompt and model
+        enhanced_prompt = query_anthropic_enhance_prompt(raw_input)
+
+        enhanced_prompt_file_path = replace_path_suffix(
+            args.input, "_enhanced_prompt.txt"
+        )
+
+        save_to_file(
+            enhanced_prompt,
+            enhanced_prompt_file_path,
+            f"\nEnhanced prompt written to {enhanced_prompt_file_path}",
+        )
+
+        final_prompt = expand_references(enhanced_prompt, args)
+    else:
+        # Use the raw input as the final prompt if --model is specified
+        final_prompt = expand_references(raw_input, args)
+
+    # First record what was prompted
+    prompt_file_path = replace_path_suffix(args.input, "_prompt.txt")
+
+    save_to_file(
+        final_prompt, prompt_file_path, f"\nFinal prompt written to {prompt_file_path}"
     )
 
-    with open(answer_file_path, "w", encoding="utf-8") as file:
-        file.write(response_text)
+    # Then request inference from Anthropic's servers
 
-    print(f"\nAnswer saved to {answer_file_path}")
+    print("\nSending prompt to Anthropic servers.")
+    response_text = query_anthropic(
+        final_prompt, args.model or "claude-3-haiku-20240307", system_prompt, 4096
+    )
+    print("\nServer responded with message.")
+
+    # Then finally record the answer
+    answer_file_path = ""
+
+    if args.output:
+        answer_file_path = os.path.abspath(args.output)
+    else:
+        answer_file_path = replace_path_suffix(args.input, "_answer.txt")
+
+    save_to_file(
+        response_text, answer_file_path, f"\nAnswer saved to {answer_file_path}"
+    )
 
 
 if __name__ == "__main__":
@@ -269,11 +304,19 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--enhance",
+        required=False,
+        action="store_true",
+        default=False,
+        help="Whether to enhance with Opus and then pass to a model or just to pass it to a model.",
+    )
+
+    parser.add_argument(
         "--model",
         required=False,
         type=str,
         help="Specify the exact version of the model to use, otherwise the latest default Opus is used.",
-        default="claude-3-opus-20240229",
+        default="",
     )
 
     parser.add_argument(
@@ -297,7 +340,6 @@ if __name__ == "__main__":
         required=False,
         action="store_true",
         default=False,
-        type=bool,
         help="Set flag to clean input to reduce token size. Check function on how it does it for now.",
     )
 

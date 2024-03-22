@@ -18,3 +18,7 @@ share/*
 old.py
 tmp/*
 tmp
+prompts
+prompts/*
+errors
+errors/*
