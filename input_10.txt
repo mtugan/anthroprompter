@@ -1,0 +1,11 @@
+Please first read through the following python program: 
+
+<program>
+main.py
+</program>
+
+Then please modify the program such that between the steps of prompt
+enhancement and querying Anthropic with the enhanced prompt, the enhanced
+prompt is printed to console and the user is question whether he would like to
+continue to the Anthropic query, retry enhancing the original prompt or
+whether he would like to abort executin altogether.

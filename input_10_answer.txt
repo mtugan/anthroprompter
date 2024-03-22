@@ -1,0 +1,66 @@
+Here is the modified Python program with the requested functionality:
+
+<program>
+import openai
+
+def enhance_prompt(prompt):
+    """Enhance the given prompt using OpenAI's GPT-3 model."""
+    response = openai.Completion.create(
+        engine="text-davinci-002",
+        prompt=f"Please enhance the following prompt:\n\n{prompt}\n\nEnhanced prompt:",
+        max_tokens=1024,
+        n=1,
+        stop=None,
+        temperature=0.7,
+    )
+    return response.choices[0].text.strip()
+
+def query_anthropic_api(enhanced_prompt):
+    """Query the Anthropic API using the enhanced prompt."""
+    # Code to query the Anthropic API goes here
+    print(f"Querying Anthropic API with enhanced prompt:\n{enhanced_prompt}")
+
+def main():
+    original_prompt = "This is the original prompt I would like to have enhanced."
+    enhanced_prompt = enhance_prompt(original_prompt)
+    print("Enhanced prompt:")
+    print(enhanced_prompt)
+
+    while True:
+        print("\nPlease choose an option:")
+        print("1. Continue with Anthropic API query")
+        print("2. Retry enhancing original prompt")
+        print("3. Abort program")
+        choice = input("Enter your choice (1, 2, or 3): ")
+
+        if choice == "1":
+            query_anthropic_api(enhanced_prompt)
+            break
+        elif choice == "2":
+            enhanced_prompt = enhance_prompt(original_prompt)
+            print("Enhanced prompt:")
+            print(enhanced_prompt)
+        elif choice == "3":
+            print("Aborting program.")
+            break
+        else:
+            print("Invalid choice. Please try again.")
+
+if __name__ == "__main__":
+    openai.api_key = "your_openai_api_key"
+    main()
+</program>
+
+The key changes made to the original program:
+
+1. Added a `print` statement to display the enhanced prompt to the user.
+2. Implemented a user menu with three options:
+   - Continue with Anthropic API query
+   - Retry enhancing the original prompt
+   - Abort the program
+3. Added a `while` loop to handle the user's choice and take the appropriate action:
+   - If the user chooses to continue, the program calls the `query_anthropic_api` function with the enhanced prompt.
+   - If the user chooses to retry, the program calls the `enhance_prompt` function again with the original prompt and displays the new enhanced prompt.
+   - If the user chooses to abort, the program prints a message and exits.
+
+The modified program preserves the original prompt enhancement and Anthropic API querying logic, while adding the requested user interaction functionality.

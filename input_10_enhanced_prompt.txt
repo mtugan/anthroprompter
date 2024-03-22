@@ -1,3 +1,6 @@
+Here is the enhanced version of the program with the requested modifications:
+
+<program>
 import os
 import re
 import sys
@@ -172,6 +175,28 @@ def save_to_file(data, path, message):
     print("\n" + message)
 
 
+def prompt_user(enhanced_prompt):
+    while True:
+        print("\nEnhanced prompt:\n")
+        print(enhanced_prompt)
+        print("\nDo you want to:")
+        print("1. Continue to query Anthropic")
+        print("2. Retry enhancing the original prompt")
+        print("3. Abort execution")
+
+        choice = input("Enter your choice (1/2/3): ")
+
+        if choice == "1":
+            return enhanced_prompt
+        elif choice == "2":
+            return None
+        elif choice == "3":
+            print("Aborting execution.")
+            sys.exit(0)
+        else:
+            print("Invalid choice. Please try again.")
+
+
 def main(args):
     # Prep environment
     load_dotenv()
@@ -201,22 +226,26 @@ def main(args):
     if prompt_enhancement:
         print("\nEnhancing prompt!")
 
-        # Enhance the prompt using the default system prompt and model
-        enhanced_prompt = query_anthropic_enhance_prompt(expand_references(raw_input, args))
+        while True:
+            # Enhance the prompt using the default system prompt and model
+            enhanced_prompt = query_anthropic_enhance_prompt(expand_references(raw_input, args))
 
-        enhanced_prompt_file_path = replace_path_suffix(
-            args.input, "_enhanced_prompt.txt"
-        )
+            enhanced_prompt_file_path = replace_path_suffix(
+                args.input, "_enhanced_prompt.txt"
+            )
 
-        save_to_file(
-            enhanced_prompt,
-            enhanced_prompt_file_path,
-            f"\nEnhanced prompt written to {enhanced_prompt_file_path}",
-        )
+            save_to_file(
+                enhanced_prompt,
+                enhanced_prompt_file_path,
+                f"\nEnhanced prompt written to {enhanced_prompt_file_path}",
+            )
 
-        return
+            # Prompt user for action
+            final_enhanced_prompt = prompt_user(enhanced_prompt)
+            if final_enhanced_prompt:
+                break
 
-        final_prompt = enhanced_prompt
+        final_prompt = final_enhanced_prompt
     else:
         # Use the raw input as the final prompt if --model is specified
         final_prompt = expand_references(raw_input, args)
@@ -346,3 +375,15 @@ if __name__ == "__main__":
     )
 
     main(parser.parse_args())
+
+</program>
+
+<explanation>
+The key changes made to the program are:
+
+1. Added a new function `prompt_user()` that takes the enhanced prompt as input, prints it to the console, and prompts the user to choose whether to continue querying Anthropic, retry enhancing the original prompt, or abort execution. This function returns the enhanced prompt if the user chooses to continue, `None` if they want to retry enhancing, or exits the program if they choose to abort.
+
+2. Modified the `main()` function to use a `while` loop in the prompt enhancement section. After generating the enhanced prompt, it calls `prompt_user()` to get the user's decision. If the user chooses to retry, the loop continues and generates a new enhanced prompt. If the user chooses to continue, the loop breaks and the program proceeds with querying Anthropic using the final enhanced prompt.
+
+These modifications allow the user to review the enhanced prompt, decide whether it meets their expectations, and either proceed with querying Anthropic or refine the prompt further before making the API call. This adds an interactive step to the process, giving the user more control over the final prompt used for generating a response.
+</explanation>
