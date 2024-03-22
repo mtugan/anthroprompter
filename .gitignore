@@ -15,3 +15,6 @@ Lib/*
 pyvenv.cfg
 etc/*
 share/*
+old.py
+tmp/*
+tmp

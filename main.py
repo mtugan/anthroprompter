@@ -10,17 +10,69 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 
+def prepare_prompt(prompt):
+    # Remove comments from Python code
+    prompt = re.sub(r"#.*", "", prompt)
+
+    prompt = re.sub(r'""".*?"""', "", prompt, flags=re.DOTALL)
+
+    # Remove unnecessary spaces around punctuation
+    prompt = re.sub(r"\s*([.,;:!?])\s*", r"\1 ", prompt)
+
+    # Remove unnecessary spaces before and after parentheses, brackets, and braces
+    prompt = re.sub(r"\s*([(){}\[\]])\s*", r"\1", prompt)
+
+    # Remove unnecessary spaces around operators
+    prompt = re.sub(r"\s*([+\-*/%=<>])\s*", r" \1 ", prompt)
+
+    # Remove extra whitespace and newline characters
+    # prompt = re.sub(r'\s+', ' ', prompt)
+
+    # Remove leading/trailing whitespace
+    prompt = prompt.strip()
+
+    return prompt
+
+
 def is_valid_file(file):
     return os.path.isfile(os.path.abspath(file))
 
 
-def read_file_contents(file):
-    file_path = os.path.abspath(file)
-    try:
-        with open(file_path, "r") as file:
-            return file.read().strip()
-    except FileNotFoundError:
-        raise FileNotFoundError(f"Input file not found: {file_path}")
+def read_file_contents_recursive(path, depth=1, current_depth=0, relative_path=""):
+    contents = ""
+
+    if current_depth == 0:
+        relative_path = path
+        path = os.path.abspath(path)
+
+    if os.path.isfile(path):
+        prefix = f"\n\n{relative_path}:\n\n" if current_depth != 0 else ""
+        try:
+            with open(path, "r", encoding="utf-8") as file:
+                contents += prefix + f"{file.read().strip()}\n\n"
+        except FileNotFoundError:
+            raise FileNotFoundError(f"\nFile {path} not found")
+
+    elif os.path.isdir(path):
+        for item in os.listdir(path):
+            item_path = os.path.join(path, item)
+            item_relative_path = os.path.join(relative_path, item)
+
+            if os.path.isfile(item_path):
+                contents += read_file_contents_recursive(
+                    item_path, depth, current_depth + 1, item_relative_path
+                )
+
+            elif os.path.isdir(item_path) and current_depth < depth:
+                contents += read_file_contents_recursive(
+                    item_path, depth, current_depth + 1, item_relative_path
+                )
+    else:
+        raise Exception(
+            f"\nProgram should not have reached this point, {path} is not a file nor dir."
+        )
+
+    return contents
 
 
 def download_webpage_recursive(url, depth=1):
@@ -36,10 +88,21 @@ def download_webpage_recursive(url, depth=1):
 
             if href:
                 if href.startswith(("http://", "https://")) and base_url in href:
-                    text += "\n\n" + download_webpage_recursive(href, depth - 1)
+                    text += (
+                        "\n\n"
+                        + href
+                        + ":\n\n"
+                        + download_webpage_recursive(href, depth - 1)
+                        + "\n\n"
+                    )
                 elif href != "/" and not href.startswith(("http://", "https://")):
-                    text += "\n\n" + download_webpage_recursive(
-                        "http://" + base_url + href, depth - 1
+                    url = "http://" + base_url + href
+                    text += (
+                        "\n\n"
+                        + url
+                        + ":\n\n"
+                        + download_webpage_recursive(url, depth - 1)
+                        + "\n\n"
                     )
     return text
 
@@ -51,41 +114,56 @@ def main(args):
 
     # Prepare system prompt text
 
-    system_prompt = None
+    system_prompt = ""
 
     if is_valid_file(args.system):
-        system_prompt = read_file_contents(args.system)
-        print(f"\nSystem prompt {args.system} is being used!\n")
+        system_prompt = read_file_contents_recursive(args.system)
+        print(f"\nSystem prompt {args.system} is being used!")
 
     # Prompt construction
 
-    if not is_valid_file(args.input):
-        print(f"\nfile {args.input} does not exist, exiting!")
+    if not os.path.exists(args.input):
+        print(f"\nFile or directory {args.input} does not exist, exiting!")
         sys.exit(0)
-
-    raw_input = read_file_contents(args.input)
-
-    input_parts = re.split(r"(\s+)", raw_input)
 
     extracted_inputs = []
 
+    # This will always be a normal file, not a dir
+
+    raw_input = read_file_contents_recursive(args.input)
+
+    # Split into parts which we can check
+
+    input_parts = re.split(r"(\s+)", raw_input)
+
     for part in input_parts:
+        # If URL, download recursively
         if part.startswith(("http://", "https://")):
-            extracted_inputs.append(
-                "\n\n" + download_webpage_recursive(part.strip(), args.ddepth) + "\n\n"
-            )
-        elif is_valid_file(part):
-            extracted_inputs.append("\n\n" + read_file_contents(part.strip()) + "\n\n")
+            if not args.urls or part in args.urls:
+                extracted_inputs.append(
+                    download_webpage_recursive(part.strip(), args.ddepth)
+                )
+        # If file or dir, read or recursively read
+        elif os.path.exists(part):
+            if not args.files or part in args.files:
+                extracted_inputs.append(
+                    read_file_contents_recursive(part.strip(), args.fdepth)
+                )
         else:
+            # Read
             extracted_inputs.append(part)
 
-    final_prompt = "".join(extracted_inputs)
+    final_prompt = (
+        prepare_prompt("".join(extracted_inputs))
+        if args.clean
+        else "".join(extracted_inputs)
+    )
 
     # First record what was prompted
 
     prompt_file_path = f"{os.path.splitext(args.input)[0]}_prompt.txt"
 
-    with open(prompt_file_path, "w", encoding='utf-8') as file:
+    with open(prompt_file_path, "w", encoding="utf-8") as file:
         file.write(final_prompt)
 
     print(f"\nFinal prompt written to {prompt_file_path}")
@@ -128,7 +206,7 @@ def main(args):
         else os.path.abspath(os.path.splitext(args.input)[0] + "_answer.txt")
     )
 
-    with open(answer_file_path, "w", encoding='utf-8') as file:
+    with open(answer_file_path, "w", encoding="utf-8") as file:
         file.write(response_text)
 
     print(f"\nAnswer saved to {answer_file_path}")
@@ -143,7 +221,25 @@ if __name__ == "__main__":
         "-i",
         "--input",
         required=True,
-        help='Input file path. The input file may contain both links and filepaths, both are going to be expanded in place, meaning that any website data is going to be expanded inline with text, and any filepath is going to be expanded inline with text.',
+        help="Input file or directory path. The input file may contain both links and filepaths, both are going to be expanded in place, meaning that any website data is going to be expanded inline with text, and any filepath is going to be expanded inline with text.",
+        type=str,
+    )
+
+    parser.add_argument(
+        "-f",
+        "--files",
+        nargs="+",
+        required=False,
+        help="Sometimes it is necessary to specify which files should exactly be inlined for the reason that any file names may theoretically expanded by the program. This is not required but your inlines will silently fail if you do not set this. It can be a whitespace separated list of filenames.",
+        type=str,
+    )
+
+    parser.add_argument(
+        "-u",
+        "--urls",
+        nargs="+",
+        required=False,
+        help="Sometimes it is necessary to specify which urls should exactly be inlined for the reason that any urls may theoretically expanded by the program. This is not required but your inlines will silently fail if you do not set this. It can be a whitespace separated list of urls.",
         type=str,
     )
 
@@ -183,9 +279,26 @@ if __name__ == "__main__":
     parser.add_argument(
         "--ddepth",
         required=False,
-        help="Website download depth when recursing child links. I would recommend not setting it above 3 initially such that you don't eat up 15$ worth of tokens immediately :].",
+        help="Website download depth when recursing child links. I would recommend not setting it above 3 initially such that you don't eat up 15$ worth of tokens immediately :]. Defaults to 1, meaning it will only download the website at the URL and not recurse into other hrefs.",
         default=1,
         type=int,
+    )
+
+    parser.add_argument(
+        "--fdepth",
+        required=False,
+        help="File and directory recursion depth when reading files. Defaults to 1, meaning it will only read files in the specified directory and not recurse into subdirectories.",
+        default=1,
+        type=int,
+    )
+
+    parser.add_argument(
+        "--clean",
+        required=False,
+        action="store_true",
+        default=False,
+        type=bool,
+        help="Set flag to clean input to reduce token size. Check function on how it does it for now.",
     )
 
     main(parser.parse_args())
