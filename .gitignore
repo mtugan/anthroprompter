@@ -4,7 +4,6 @@ lib
 bin/*
 lib/*
 .env
-*.txt
 *.md
 !README.md
 *.un~
