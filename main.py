@@ -198,11 +198,15 @@ def main(args):
     # This will always be a normal file, not a dir
     raw_input = read_file_contents_recursive(args.input)
 
+    final_prompt = ""
+
     if prompt_enhancement:
         print("\nEnhancing prompt!")
 
         # Enhance the prompt using the default system prompt and model
-        enhanced_prompt = query_anthropic_enhance_prompt(raw_input)
+        enhanced_prompt = query_anthropic_enhance_prompt(
+            expand_references(raw_input, args)
+        )
 
         enhanced_prompt_file_path = replace_path_suffix(
             args.input, "_enhanced_prompt.txt"
@@ -214,7 +218,7 @@ def main(args):
             f"\nEnhanced prompt written to {enhanced_prompt_file_path}",
         )
 
-        final_prompt = expand_references(enhanced_prompt, args)
+        final_prompt = enhanced_prompt
     else:
         # Use the raw input as the final prompt if --model is specified
         final_prompt = expand_references(raw_input, args)

@@ -1,0 +1,9 @@
+Please first read through the following python program: 
+
+<program>
+main.py
+</program>
+
+Then please restructure the python program such that it can both be used as
+a CLI but also imported as a module. Feel free to add additional files and
+other ideas on how to do this.

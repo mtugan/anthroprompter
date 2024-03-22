@@ -14,7 +14,7 @@ Your sole objective is to analyze the structure and wording of the prompt and su
 
 Your enhanced prompt should maintain the core intent of the original prompt while incorporating these improvements. The goal is to enable the language model to generate higher-quality, more reliable responses.
 
-Preserve any URLs or filepaths enclosed in tags within the original prompt, as their contents will be expanded in-place later. Make sure to include these tags in your rewrite.
+Preserve any data enclosed in tags within the original prompt without exception. Make sure to include these tags in your rewrite.
 
 Focus on providing multiple pertinent examples within <examples></examples> tags. These examples should be aligned with the main objectives of the original prompt and build upon any examples provided by the user.
 

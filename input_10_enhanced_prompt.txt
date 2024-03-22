@@ -1,0 +1,107 @@
+Here's an enhanced version of your prompt that focuses on improving the structure and modularity of the Python program:
+
+<examples>
+
+Restructured Python Program:
+
+1. Create a new file named `anthropic_api.py` with the following content:
+
+```python
+import os
+import re
+import sys
+import json
+import requests
+import anthropic
+
+from bs4 import BeautifulSoup
+from dotenv import load_dotenv
+
+def prepare_prompt(prompt):
+    # ... (keep the existing implementation)
+
+def is_valid_file(file):
+    # ... (keep the existing implementation)
+
+def read_file_contents_recursive(path, depth=1, current_depth=0, relative_path=""):
+    # ... (keep the existing implementation)
+
+def download_webpage_recursive(url, depth=1):
+    # ... (keep the existing implementation)
+
+def expand_references(prompt, args):
+    # ... (keep the existing implementation)
+
+def query_anthropic(prompt, anthropic_model, system_prompt, tokens):
+    # ... (keep the existing implementation)
+
+def query_anthropic_enhance_prompt(prompt):
+    # ... (keep the existing implementation)
+
+def replace_path_suffix(path, suffix):
+    # ... (keep the existing implementation)
+
+def save_to_file(data, path, message):
+    # ... (keep the existing implementation)
+```
+
+2. Update the `main` function in the original file to use the functions from `anthropic_api.py`:
+
+```python
+from anthropic_api import *
+
+def main(args):
+    # ... (keep the existing implementation)
+
+if __name__ == "__main__":
+    # ... (keep the existing argument parsing and main function call)
+```
+
+3. Create a new file named `__init__.py` in the same directory to make the directory a Python package.
+
+4. Update the `README.md` file with instructions on how to use the program as both a CLI tool and a Python module:
+
+```markdown
+# Anthropic API Interaction Program
+
+This program allows you to interact with Anthropic's API using both a command-line interface (CLI) and as a Python module.
+
+## Using as a CLI
+
+... (provide instructions on how to run the program from the command line, including the available arguments)
+
+## Using as a Python Module
+
+To use the program as a Python module, follow these steps:
+
+1. Install the required dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
+
+2. Import the desired functions from the `anthropic_api` module in your Python script:
+   ```python
+   from anthropic_api import prepare_prompt, read_file_contents_recursive, download_webpage_recursive, query_anthropic
+   ```
+
+3. Use the imported functions in your script as needed:
+   ```python
+   prompt = "..."
+   cleaned_prompt = prepare_prompt(prompt)
+   file_contents = read_file_contents_recursive("path/to/file.txt")
+   webpage_text = download_webpage_recursive("https://example.com")
+   response = query_anthropic(cleaned_prompt, "claude-3-haiku-20240307", "", 4096)
+   ```
+```
+</examples>
+
+<explanation>
+The key changes made to enhance the prompt and improve the structure of the Python program:
+
+1. Separated the main functionality into a separate module named `anthropic_api.py` to make the code more modular and reusable.
+2. Updated the `main` function in the original file to use the functions from the `anthropic_api` module, keeping the CLI functionality intact.
+3. Added a `__init__.py` file to make the directory a Python package, allowing easy importing of the `anthropic_api` module.
+4. Provided examples and instructions in the `README.md` file on how to use the program as both a CLI tool and a Python module, including the available arguments and example usage of the module functions.
+
+These changes make the program more modular, easier to maintain, and provide flexibility for users to interact with the Anthropic API using either the CLI or by importing the module functions into their own Python scripts.
+</explanation>
