@@ -16,16 +16,16 @@ def prepare_prompt(prompt):
     prompt = re.sub(r'""".*?"""', "", prompt, flags=re.DOTALL)
 
     # Remove unnecessary spaces around punctuation
-    prompt = re.sub(r"\s*([.,;:!?])\s*", r"\1 ", prompt)
+    #prompt = re.sub(r"\s*([.,;:!?])\s*", r"\1 ", prompt)
 
     # Remove unnecessary spaces before and after parentheses, brackets, and braces
-    prompt = re.sub(r"\s*([(){}\[\]])\s*", r"\1", prompt)
+    #prompt = re.sub(r"\s*([(){}\[\]])\s*", r"\1", prompt)
 
     # Remove unnecessary spaces around operators
-    prompt = re.sub(r"\s*([+\-*/%=<>])\s*", r" \1 ", prompt)
+    #prompt = re.sub(r"\s*([+\-*/%=<>])\s*", r" \1 ", prompt)
 
     # Remove extra whitespace and newline characters
-    # prompt = re.sub(r'\s+', ' ', prompt)
+    #prompt = re.sub(r'\s+', ' ', prompt)
 
     # Remove leading/trailing whitespace
     prompt = prompt.strip()
@@ -47,7 +47,7 @@ def read_file_contents_recursive(path, depth=1, current_depth=0, relative_path="
     if os.path.isfile(path):
         prefix = f"\n\n{relative_path}:\n\n" if current_depth != 0 else ""
         try:
-            with open(path, "r", encoding="utf-8") as file:
+            with open(path, "r", encoding="utf-8", errors="replace") as file:
                 contents += prefix + f"{file.read().strip()}\n\n"
         except FileNotFoundError:
             raise FileNotFoundError(f"\nFile {path} not found")
@@ -74,13 +74,17 @@ def read_file_contents_recursive(path, depth=1, current_depth=0, relative_path="
     return contents
 
 
-def download_webpage_recursive(url, depth=1):
+def download_webpage(url, depth=1, recursive=False):
+    if url[-1] == '+':
+        url = url[:-1]
+        recursive = True
+
     response = requests.get(url)
     soup = BeautifulSoup(response.text, "html.parser")
     text = soup.get_text()
 
-    if 1 < depth:
-        base_url = url.split("//")[-1].split("/")[0]
+    if 1 < depth and recursive:
+        base_url = url.split("//")[-1]
 
         for link in soup.find_all("a"):
             href = link.get("href")
@@ -91,7 +95,7 @@ def download_webpage_recursive(url, depth=1):
                         "\n\n"
                         + href
                         + ":\n\n"
-                        + download_webpage_recursive(href, depth - 1)
+                        + download_webpage(href, depth - 1, True)
                         + "\n\n"
                     )
                 elif href != "/" and not href.startswith(("http://", "https://")):
@@ -100,7 +104,7 @@ def download_webpage_recursive(url, depth=1):
                         "\n\n"
                         + url
                         + ":\n\n"
-                        + download_webpage_recursive(url, depth - 1)
+                        + download_webpage(url, depth - 1, True)
                         + "\n\n"
                     )
     return text
@@ -115,7 +119,7 @@ def expand_references(prompt, args):
         if part.startswith(("http://", "https://")):
             if not args.urls or part in args.urls:
                 extracted_inputs.append(
-                    download_webpage_recursive(part.strip(), args.ddepth)
+                    download_webpage(part.strip(), args.ddepth)
                 )
         # If file or dir, read or recursively read
         elif os.path.exists(part):
@@ -134,6 +138,18 @@ def expand_references(prompt, args):
 
     return final_prompt
 
+def select_model(model):
+    model_dict = {
+        "opus": "claude-3-opus-20240229",
+        "haiku": "claude-3-haiku-20240307",
+        "claude-3-opus-20240229": "claude-3-opus-20240229",
+        "claude-3-haiku-20240307": "claude-3-haiku-20240307",
+    }
+
+    try:
+        return model_dict.get(model)
+    except:
+        return select_model("haiku")
 
 def query_anthropic(prompt, anthropic_model, system_prompt, tokens):
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -159,7 +175,7 @@ def query_anthropic(prompt, anthropic_model, system_prompt, tokens):
 
 def query_anthropic_enhance_prompt(prompt):
     system_prompt = read_file_contents_recursive("assistants/00-prompt.txt")
-    return query_anthropic(prompt, "claude-3-opus-20240229", system_prompt, 4096)
+    return query_anthropic(prompt, select_model("opus"), system_prompt, 4096)
 
 
 def replace_path_suffix(path, suffix):
@@ -170,6 +186,32 @@ def save_to_file(data, path, message):
     with open(path, "w", encoding="utf-8") as file:
         file.write(data)
     print("\n" + message)
+
+def console_prompt_enhancement():
+    result = ""
+
+    while result == "":
+        user_input = input(
+            "Enter 'y' to proceed, 'r' to regenerate, or 'n' to cancel: "
+        )
+
+        if user_input.lower() == "y":
+            # Proceed with the program
+            print("Proceeding with the program...")
+            result = "y"
+        elif user_input.lower() == "r":
+            # Regenerate the program
+            print("Regenerating the program...")
+            # Add your regeneration logic here
+            result = "r"
+        elif user_input.lower() == "n":
+            # Cancel the program
+            print("Canceling the program...")
+            result = "n"
+        else:
+            print("Invalid input. Please try again.")
+
+    return result
 
 
 def main(args):
@@ -201,12 +243,22 @@ def main(args):
     if prompt_enhancement:
         print("\nEnhancing prompt!")
 
-        # Enhance the prompt using the default system prompt and model
-        enhanced_prompt = query_anthropic_enhance_prompt(expand_references(raw_input, args))
+        console_prompt_result = "r"
 
-        enhanced_prompt_file_path = replace_path_suffix(
-            args.input, "_enhanced_prompt.txt"
-        )
+        while console_prompt_result == "r":
+            # Enhance the prompt using the default system prompt and model
+            enhanced_prompt = query_anthropic_enhance_prompt(raw_input)
+
+            enhanced_prompt_file_path = replace_path_suffix(
+                args.input, "_enhanced_prompt.txt"
+            )
+
+            print("\nVerify enhanced prompt:" + "\n\n" + enhanced_prompt + "\n")
+
+            console_prompt_result = console_prompt_enhancement()
+
+        if console_prompt_result == "n":
+            sys.exit(0)
 
         save_to_file(
             enhanced_prompt,
@@ -214,9 +266,7 @@ def main(args):
             f"\nEnhanced prompt written to {enhanced_prompt_file_path}",
         )
 
-        return
-
-        final_prompt = enhanced_prompt
+        final_prompt = expand_references(enhanced_prompt, args)
     else:
         # Use the raw input as the final prompt if --model is specified
         final_prompt = expand_references(raw_input, args)
@@ -231,9 +281,7 @@ def main(args):
     # Then request inference from Anthropic's servers
 
     print("\nSending prompt to Anthropic servers.")
-    response_text = query_anthropic(
-        final_prompt, args.model or "claude-3-haiku-20240307", system_prompt, 4096
-    )
+    response_text = query_anthropic(final_prompt, select_model(args.model), system_prompt, 4096)
     print("\nServer responded with message.")
 
     # Then finally record the answer
